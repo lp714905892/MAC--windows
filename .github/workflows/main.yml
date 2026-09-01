@@ -1,0 +1,29 @@
+name: Build Windows EXE
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: 获取代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 安装 PyInstaller
+        run: python -m pip install --upgrade pyinstaller
+
+      - name: 构建 EXE
+        run: python -m PyInstaller --noconfirm --clean --onefile --windowed --name MAC地址采集工具 mac_collector.py
+
+      - name: 上传 EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: MAC地址采集工具-windows
+          path: dist/MAC地址采集工具.exe
