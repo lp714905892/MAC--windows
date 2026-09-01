@@ -35,6 +35,7 @@ python -m PyInstaller --noconfirm --clean --onefile --windowed --name MAC地址�
 
 - 姓名和学校/部门为可选项；填写后方便后续汇总。
 - 程序只读取存在 IPv4 或 IPv6 默认网关且标记为物理设备的网卡 MAC 地址，虚拟网卡会被排除。
+- 程序会自动读取 Windows 电脑的品牌和型号，并显示在界面和 TXT 文件中。
 - “复制 MAC”可将地址复制到剪贴板，便于临时粘贴到表格或聊天工具。
 - 文件使用 UTF-8 with BOM 编码，可直接用 Windows 记事本或 Word 打开。
 

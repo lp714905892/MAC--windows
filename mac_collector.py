@@ -83,6 +83,42 @@ def get_mac_addresses() -> list[str]:
     return addresses
 
 
+def get_device_info() -> tuple[str, str]:
+    """读取 Windows 电脑品牌和型号；读取失败时返回明确的未知值。"""
+    unknown = ("未知品牌", "未知型号")
+    if not sys.platform.startswith("win"):
+        return unknown
+
+    try:
+        completed = subprocess.run(
+            [
+                "powershell.exe",
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-Command",
+                (
+                    "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; "
+                    "Get-CimInstance -ClassName Win32_ComputerSystem | "
+                    "ForEach-Object { '{0}`t{1}' -f $_.Manufacturer, $_.Model }"
+                ),
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="ignore",
+            timeout=5,
+            check=False,
+        )
+        line = next((item.strip() for item in completed.stdout.splitlines() if item.strip()), "")
+        if "\t" in line:
+            manufacturer, model = (part.strip() for part in line.split("\t", 1))
+            return manufacturer or unknown[0], model or unknown[1]
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return unknown
+
+
 def _safe_filename_part(value: str, fallback: str) -> str:
     value = re.sub(r"[<>:\"/\\|?*\x00-\x1f]", "_", value.strip())
     return value or fallback
@@ -106,6 +142,7 @@ class MacCollectorApp:
         self.root.resizable(False, False)
 
         self.mac_addresses = get_mac_addresses()
+        self.manufacturer, self.model = get_device_info()
         self.name_var = tk.StringVar()
         self.school_var = tk.StringVar()
         self.mac_var = tk.StringVar(value=self._mac_display())
@@ -165,6 +202,12 @@ class MacCollectorApp:
         ttk.Label(form, text="电脑名称：").grid(row=3, column=0, sticky="w", pady=7)
         ttk.Label(form, text=socket.gethostname()).grid(row=3, column=1, sticky="w", pady=7)
 
+        ttk.Label(form, text="电脑品牌：").grid(row=4, column=0, sticky="w", pady=7)
+        ttk.Label(form, text=self.manufacturer).grid(row=4, column=1, sticky="w", pady=7)
+
+        ttk.Label(form, text="电脑型号：").grid(row=5, column=0, sticky="w", pady=7)
+        ttk.Label(form, text=self.model).grid(row=5, column=1, sticky="w", pady=7)
+
         ttk.Separator(outer).pack(fill="x", pady=(20, 14))
         ttk.Label(outer, textvariable=self.status_var, foreground="#555555").pack(anchor="w")
 
@@ -220,6 +263,8 @@ class MacCollectorApp:
             f"教师姓名：{self.name_var.get().strip() or '未填写'}",
             f"学校/部门：{self.school_var.get().strip() or '未填写'}",
             f"电脑名称：{socket.gethostname()}",
+            f"电脑品牌：{self.manufacturer}",
+            f"电脑型号：{self.model}",
             f"采集时间：{now:%Y-%m-%d %H:%M:%S}",
             "",
             "MAC 地址：",
