@@ -100,7 +100,7 @@ def get_device_info() -> tuple[str, str]:
                 (
                     "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; "
                     "Get-CimInstance -ClassName Win32_ComputerSystem | "
-                    "ForEach-Object { '{0}`t{1}' -f $_.Manufacturer, $_.Model }"
+                    "ForEach-Object { Write-Output $_.Manufacturer; Write-Output $_.Model }"
                 ),
             ],
             capture_output=True,
@@ -110,10 +110,9 @@ def get_device_info() -> tuple[str, str]:
             timeout=5,
             check=False,
         )
-        line = next((item.strip() for item in completed.stdout.splitlines() if item.strip()), "")
-        if "\t" in line:
-            manufacturer, model = (part.strip() for part in line.split("\t", 1))
-            return manufacturer or unknown[0], model or unknown[1]
+        values = [item.strip() for item in completed.stdout.splitlines() if item.strip()]
+        if len(values) >= 2:
+            return values[0] or unknown[0], values[1] or unknown[1]
     except (OSError, subprocess.SubprocessError):
         pass
     return unknown
