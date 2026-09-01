@@ -29,15 +29,38 @@ def _normalise_mac(value: str) -> str:
     return "-".join(compact[i : i + 2] for i in range(0, 12, 2)).upper()
 
 
+def _extract_macs(source: str) -> list[str]:
+    addresses: list[str] = []
+    for match in MAC_PATTERN.findall(source):
+        mac = _normalise_mac(match)
+        if mac and mac not in addresses and mac != "00-00-00-00-00-00":
+            addresses.append(mac)
+    return addresses
+
+
 def get_mac_addresses() -> list[str]:
-    """读取本机可见的硬件 MAC 地址，并尽量兼容不同 Windows 语言环境。"""
+    """只读取存在默认网关的物理网卡 MAC 地址，排除虚拟网卡。"""
     addresses: list[str] = []
 
-    # getmac 是 Windows 自带命令，输出语言无关地包含 MAC 格式字符串。
+    # 通过默认网关筛选接口，再读取其 MAC，避免把虚拟网卡混入结果。
     if sys.platform.startswith("win"):
         try:
             completed = subprocess.run(
-                ["getmac", "/fo", "csv", "/nh"],
+                [
+                    "powershell.exe",
+                    "-NoProfile",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-Command",
+                    (
+                        "$configs = Get-NetIPConfiguration | "
+                        "Where-Object { $_.IPv4DefaultGateway -ne $null -or $_.IPv6DefaultGateway -ne $null }; "
+                        "foreach ($config in $configs) { "
+                        "$adapter = Get-NetAdapter -Physical -InterfaceIndex $config.InterfaceIndex "
+                        "-ErrorAction SilentlyContinue; "
+                        "if ($adapter.MacAddress) { $adapter.MacAddress } }"
+                    ),
+                ],
                 capture_output=True,
                 text=True,
                 encoding="utf-8",
@@ -45,16 +68,12 @@ def get_mac_addresses() -> list[str]:
                 timeout=5,
                 check=False,
             )
-            source = f"{completed.stdout}\n{completed.stderr}"
-            for match in MAC_PATTERN.findall(source):
-                mac = _normalise_mac(match)
-                if mac and mac not in addresses and mac != "00-00-00-00-00-00":
-                    addresses.append(mac)
+            addresses = _extract_macs(completed.stdout)
         except (OSError, subprocess.SubprocessError):
             pass
 
-    # 跨平台兜底：uuid 通常返回系统主网卡地址。
-    if not addresses:
+    # 非 Windows 环境仅用于开发测试，使用系统主网卡地址兜底。
+    if not addresses and not sys.platform.startswith("win"):
         node = uuid.getnode()
         raw = f"{node:012x}"
         mac = _normalise_mac(raw)
@@ -127,7 +146,7 @@ class MacCollectorApp:
             row=1, column=1, sticky="ew", pady=7
         )
 
-        ttk.Label(form, text="检测到的 MAC 地址：").grid(row=2, column=0, sticky="nw", pady=7)
+        ttk.Label(form, text="有网关的 MAC 地址：").grid(row=2, column=0, sticky="nw", pady=7)
         self.mac_box = tk.Text(
             form,
             width=40,
@@ -175,7 +194,10 @@ class MacCollectorApp:
 
     def save_txt(self) -> None:
         if not self.mac_addresses:
-            messagebox.showerror("无法生成文件", "没有检测到 MAC 地址，请先检查网络连接后重试。")
+            messagebox.showerror(
+                "无法生成文件",
+                "没有检测到带默认网关的网卡，请先连接网络后重试。",
+            )
             return
 
         now = _dt.datetime.now()
